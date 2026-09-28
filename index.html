@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>螺旋丸プロトタイプ</title>
+<link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+<div id="stage">
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="overlay"></canvas>
+  <canvas id="fx"></canvas>
+  <div id="cast-flash"></div>
+
+  <button id="start-btn">カメラを起動して開始</button>
+
+  <div id="hud">
+    <b>操作方法</b><br>
+    手のひらを開いてカメラに向かって<br>
+    <b>掲げる</b>と、手の平に螺旋丸が出現します。<br>
+    手を閉じる/下ろすと消えます。
+  </div>
+  <div id="status">初期化中...</div>
+  <div id="bar-wrap"><div id="bar"></div></div>
+</div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
