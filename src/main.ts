@@ -1,11 +1,19 @@
 // コンポジションルート: 各層を組み立て、フレームループを回す。
+import { SummonRasenganUseCase } from './application/SummonRasenganUseCase.js';
 import { PalmHoldDetector } from './domain/PalmHoldDetector.js';
-import { SummonMagicUseCase } from './application/SummonMagicUseCase.js';
 import { Camera } from './infrastructure/Camera.js';
 import { MediaPipeHandTracker } from './infrastructure/MediaPipeHandTracker.js';
 import { HandOverlayRenderer } from './presentation/HandOverlayRenderer.js';
-import { MagmaOrbEffect } from './presentation/MagmaOrbEffect.js';
 import { Hud } from './presentation/Hud.js';
+import { RasenganEffect } from './presentation/RasenganEffect.js';
+import type { Point2D } from './types.js';
+
+// ?preview を付けて開くと、カメラと手の検出を使わずに画面中央へ螺旋丸を出し続ける(見た目の調整・確認用)。
+// &bg=light を付けると背景を明るくし、白い壁や肌の上での見え方を確認できる。
+const params = new URLSearchParams(location.search);
+const IS_PREVIEW = params.has('preview');
+const PREVIEW_ORIGIN: Point2D = { x: 0.5, y: 0.5 };
+const PREVIEW_LIGHT_BACKGROUND = '#e8e2d8';
 
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -13,78 +21,91 @@ function byId<T extends HTMLElement>(id: string): T {
   return el as T;
 }
 
+function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 const video = byId<HTMLVideoElement>('video');
 const overlayCanvas = byId<HTMLCanvasElement>('overlay');
-const fxCanvas = byId<HTMLCanvasElement>('fx');
 const startBtn = byId<HTMLButtonElement>('start-btn');
 
 const hud = new Hud(byId('status'), byId('bar'));
 const overlay = new HandOverlayRenderer(overlayCanvas);
 const camera = new Camera(video);
 const tracker = new MediaPipeHandTracker();
-const summonMagic = new SummonMagicUseCase({ palmHoldDetector: new PalmHoldDetector() });
+const summonRasengan = new SummonRasenganUseCase({ palmHoldDetector: new PalmHoldDetector() });
 
-// MagmaOrbEffect は光球画像の読み込みを待つ非同期ファクトリのため、準備できるまでボタンを無効化しておく
-let effect: MagmaOrbEffect | null = null;
-function getEffect(): MagmaOrbEffect {
-  if (!effect) throw new Error('エフェクトの初期化が完了していません');
-  return effect;
+let effect: RasenganEffect;
+try {
+  effect = new RasenganEffect(byId('fx'), byId('appear-flash'));
+} catch (e) {
+  // WebGL が使えない環境など。以降の処理は続けられないので、表示だけして止める
+  hud.setStatus('初期化エラー: ' + errorMessage(e));
+  throw e;
 }
 
 function resizeCanvases(): void {
   overlayCanvas.width = window.innerWidth;
   overlayCanvas.height = window.innerHeight;
-  // fx キャンバスは Three.js の WebGLRenderer が管理しているため、専用の resize() 経由で反映する
-  effect?.resize(window.innerWidth, window.innerHeight);
+  // fx キャンバスは three.js の WebGLRenderer が管理しているため、専用の resize() 経由で反映する
+  effect.resize(window.innerWidth, window.innerHeight);
 }
-window.addEventListener('resize', resizeCanvases);
 
-function loop(): void {
+function renderRasengan(origin: Point2D | null): void {
+  effect.setTarget(origin);
+  effect.render();
+}
+
+function cameraLoop(): void {
   const landmarks = tracker.detect(video, performance.now());
-  const result = summonMagic.execute(landmarks);
+  const result = summonRasengan.execute(landmarks);
 
   overlay.clear();
-  if (landmarks && result.handFound) {
+  if (landmarks) {
     overlay.draw(landmarks);
     hud.showHand(!!result.isOpenPalm, result.progress);
   } else {
     hud.showNoHand();
   }
 
-  const e = getEffect();
-  e.setTarget(result.origin);
-  e.render();
-  requestAnimationFrame(loop);
+  renderRasengan(result.origin);
+  requestAnimationFrame(cameraLoop);
 }
 
-async function start(): Promise<void> {
+function previewLoop(): void {
+  renderRasengan(PREVIEW_ORIGIN);
+  requestAnimationFrame(previewLoop);
+}
+
+async function startCamera(): Promise<void> {
   hud.setStatus('モデル読み込み中...');
   await tracker.load();
   await camera.start();
   hud.setStatus('手を映してください');
-  requestAnimationFrame(loop);
+  requestAnimationFrame(cameraLoop);
 }
 
-startBtn.disabled = true;
-startBtn.addEventListener('click', async () => {
+function startPreview(): void {
   startBtn.style.display = 'none';
-  try {
-    await start();
-  } catch (e) {
-    hud.setStatus('エラー: ' + (e instanceof Error ? e.message : String(e)));
-    console.error(e);
-  }
-});
+  if (params.get('bg') === 'light') document.body.style.background = PREVIEW_LIGHT_BACKGROUND;
+  hud.setStatus('プレビュー(カメラなし)');
+  requestAnimationFrame(previewLoop);
+}
 
-hud.setStatus('画像読み込み中...');
-MagmaOrbEffect.create(fxCanvas, byId('cast-flash'))
-  .then(created => {
-    effect = created;
-    resizeCanvases();
-    startBtn.disabled = false;
-    hud.setStatus('準備完了');
-  })
-  .catch(e => {
-    hud.setStatus('初期化エラー: ' + (e instanceof Error ? e.message : String(e)));
-    console.error(e);
+window.addEventListener('resize', resizeCanvases);
+resizeCanvases();
+
+if (IS_PREVIEW) {
+  startPreview();
+} else {
+  startBtn.addEventListener('click', async () => {
+    startBtn.style.display = 'none';
+    try {
+      await startCamera();
+    } catch (e) {
+      hud.setStatus('エラー: ' + errorMessage(e));
+      console.error(e);
+    }
   });
+  hud.setStatus('準備完了');
+}

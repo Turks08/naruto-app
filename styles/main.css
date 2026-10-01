@@ -32,8 +32,9 @@ video { transform: scaleX(-1); } /* 鏡合わせ表示 */
   height: 100%; width: 0%; background: linear-gradient(90deg,#5ad8ff,#7c4dff);
   transition: width 0.05s linear;
 }
-#cast-flash {
-  position: absolute; inset: 0; background: radial-gradient(circle, rgba(124,77,255,0.55), transparent 60%);
+/* 螺旋丸が出現した瞬間に画面全体を一瞬光らせる */
+#appear-flash {
+  position: absolute; inset: 0; background: radial-gradient(circle, rgba(40,140,255,0.55), transparent 60%);
   opacity: 0; z-index: 4; pointer-events: none;
 }
 .flash-anim { animation: flashOut 0.5s ease-out forwards; }

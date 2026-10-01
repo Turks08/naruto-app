@@ -2,33 +2,34 @@ import { Hand } from '../domain/Hand.js';
 import type { PalmHoldDetector } from '../domain/PalmHoldDetector.js';
 import type { Landmark, Point2D } from '../types.js';
 
-export interface SummonMagicResult {
+export interface SummonRasenganResult {
   handFound: boolean;
+  /** 手が見つかったときだけ入る。 */
   isOpenPalm?: boolean;
-  /** 0..1。手のひらを掲げ始めてから顕現が確定するまでの度合い。 */
+  /** 0..1。手のひらを掲げ始めてから、螺旋丸の出現が確定するまでの進み具合。 */
   progress: number;
-  /** 顕現中(手のひらを掲げている間)は true。 */
+  /** 螺旋丸を出している間(手のひらを掲げている間)は true。 */
   summoning: boolean;
-  /** 顕現中の手のひら位置(正規化座標)。顕現していなければ null。 */
+  /** 螺旋丸を出す位置(手のひらの中心。正規化座標)。出していなければ null。 */
   origin: Point2D | null;
 }
 
-export interface SummonMagicDeps {
+export interface SummonRasenganDeps {
   palmHoldDetector: PalmHoldDetector;
 }
 
-// ユースケース: 1フレーム分のランドマークから、マグマ玉を顕現させるか判断する。
+// ユースケース: 1フレーム分のランドマークから、螺旋丸を出すかどうかを判断する。
 // 描画やデバイスには依存せず、結果を素のオブジェクトで返す。
-export class SummonMagicUseCase {
+export class SummonRasenganUseCase {
   private readonly palmHoldDetector: PalmHoldDetector;
 
-  constructor({ palmHoldDetector }: SummonMagicDeps) {
+  constructor({ palmHoldDetector }: SummonRasenganDeps) {
     this.palmHoldDetector = palmHoldDetector;
   }
 
-  execute(landmarks: Landmark[] | null): SummonMagicResult {
+  execute(landmarks: Landmark[] | null): SummonRasenganResult {
     if (!landmarks) {
-      // 手が見えない間は「閉じた手」として扱い、しばらくして消失させる
+      // 手が見えない間は「閉じた手」として扱い、しばらくして消す
       const { summoning, progress } = this.palmHoldDetector.observe(false);
       return { handFound: false, progress, summoning, origin: null };
     }

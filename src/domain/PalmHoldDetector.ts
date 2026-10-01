@@ -1,13 +1,15 @@
+/**
+ * 1フレームだけの検出ブレで出現/消失が点滅しないよう、同じ状態がこのフレーム数続いてから切り替える
+ * (チャタリング防止のデバウンス)。
+ */
+const HOLD_FRAMES = 5;
+
 export interface PalmHoldObservation {
-  /** 手のひらを掲げ続けている(顕現中)か。 */
+  /** 手のひらを掲げ続けている(螺旋丸を出している)か。 */
   summoning: boolean;
-  /** 0..1。掲げ始め/下ろし始めの移行をなめらかにするための度合い。 */
+  /** 0..1。掲げ始め/下ろし始めから、状態が切り替わるまでの進み具合。 */
   progress: number;
 }
-
-// 1フレームだけの検出ブレで顕現/消失が点滅しないよう、
-// 連続フレーム数で状態を確定させる(チャタリング防止のデバウンス)。
-const HOLD_FRAMES = 5;
 
 // ドメインサービス: 「手のひらを開いて掲げている」状態が続いているかを検知する。
 export class PalmHoldDetector {
@@ -15,6 +17,7 @@ export class PalmHoldDetector {
   private closedStreak = 0;
   private summoning = false;
 
+  /** 毎フレーム、そのフレームで手が開いていたかを渡す。 */
   observe(isOpenPalm: boolean): PalmHoldObservation {
     if (isOpenPalm) {
       this.openStreak++;
@@ -32,11 +35,5 @@ export class PalmHoldDetector {
       : Math.min(this.openStreak / HOLD_FRAMES, 1);
 
     return { summoning: this.summoning, progress };
-  }
-
-  reset(): void {
-    this.openStreak = 0;
-    this.closedStreak = 0;
-    this.summoning = false;
   }
 }

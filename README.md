@@ -45,6 +45,7 @@ npm run dev
 ```
 index.html                         # エントリー HTML
 styles/main.css                    # 全体のスタイル
+docs/rasengan-reference.jpg        # 見た目の参考画像（コードからは読み込んでいない）
 src/
 ├── main.ts                        # コンポジションルート。各層を組み立ててフレームループを回す
 ├── types.ts                       # 共有する基本型（Point2D, Landmark）
@@ -52,34 +53,39 @@ src/
 │   ├── Hand.ts                    # 検出された手の値オブジェクト（開いた手かどうかの判定など）
 │   └── PalmHoldDetector.ts        # 「手のひらを掲げ続けている」状態の検知（デバウンス付き）
 ├── application/
-│   └── SummonMagicUseCase.ts      # 1フレーム分のランドマークから、エフェクトを出すかどうかを判断する
+│   └── SummonRasenganUseCase.ts   # 1フレーム分のランドマークから、螺旋丸を出すかどうかを判断する
 ├── infrastructure/
 │   ├── Camera.ts                  # getUserMedia のラッパー
 │   └── MediaPipeHandTracker.ts    # MediaPipe HandLandmarker のアダプタ
 └── presentation/
     ├── HandOverlayRenderer.ts     # 手の骨格を Canvas 2D で描画
     ├── Hud.ts                     # ステータス文言と発動ゲージの更新
-    ├── MagmaOrbEffect.ts          # 球体エフェクト本体（three.js）
-    └── assets/orb.jpg             # コア・オーラ・グローに使う光球画像
+    ├── RasenganEffect.ts          # 螺旋丸エフェクト本体（three.js）。レンダラー・カメラ・出現/追従の制御
+    └── rasengan/                  # RasenganEffect の部品
+        ├── constants.ts           # 共有定数（基準半径・描画順）
+        ├── random.ts              # 乱数ヘルパー
+        ├── shaders.ts             # GLSL シェーダー
+        ├── textures.ts            # ハロー・中心の光・風の弧用テクスチャの生成
+        ├── RasenganBody.ts        # 球本体（ハロー・半透明の球・中心の白い光）
+        ├── ChakraThreads.ts       # 球の中で絡み合って回るチャクラの線
+        └── WindArcs.ts            # 球の外側を回る風の弧
 ```
 
 ## エフェクトの仕組み
 
-[ics-creative/160907_magma_effect](https://github.com/ics-creative/160907_magma_effect) の「マグマ球」のレイヤー構造をもとにしている。これを、手のひらに追従して出現し続けるオブジェクトとして移植した。
-クラス名 `MagmaOrbEffect` はこの経緯に由来する。
+[ics-creative/160907_magma_effect](https://github.com/ics-creative/160907_magma_effect) のレイヤー構成（発光リングなど）を出発点に、`docs/rasengan-reference.jpg` の見た目に合わせて作り直した。
 
 | レイヤー | 実装 |
 | --- | --- |
-| コア | `orb.jpg` をマットキャップ方式でサンプリングする。自転させても継ぎ目が出ない |
-| オーラ | コアと同じ画像を紫に色づけし、一回り大きくしてコアと逆向きに回転させる（加算合成） |
-| リムライト | 縁だけが光るフレネル風の発光。参照実装は WebGPU/TSL なので、GLSL の `ShaderMaterial` で同じ見た目を再現した |
-| 発光リング | 参照実装の Flare を移植した。傾きの異なる複数の帯を、それぞれ別の速度でスクロールさせる |
-| 外周グロー | 背後に広がる加算合成のスプライト |
-| 火の粉 | 常に発生し続けるポイントスプライトのパーティクル |
+| 球本体 | 正面ほど白っぽい水色、縁ほど濃い青になる半透明の球。縁のごく外周は透かして柔らかくする。中心には白い光の玉を加算で重ねる |
+| ハロー | 球の背後に置いた青い放射グラデーションのビルボード。縁が光ってにじんで見える |
+| チャクラの線 | 球の中の大きさの違う殻の上に、細い円弧を260本置く。1本ずつ別の軸・速さで回す（回転は頂点シェーダー）。手前と奥の線が違う方向に流れるので、立体の毛糸玉に見える。奥側の線は暗くする |
+| 風の弧 | 球の外側を大きく回る、薄く半透明な弧。参照実装の Flare のリング生成を、弧を切り出せるよう拡張した |
 
-- `orb.jpg` は背景にチェッカー柄が焼き込まれた不透明な JPEG である。そのため読み込み後に放射状のマスクを掛けて、周縁部を透明にしてから使う
-- カメラは正投影（`OrthographicCamera`）にしている。映像のピクセル座標をそのままワールド座標の XY に対応させ、手のひらの2D座標に直接重ねる
+- カメラは遠近（`PerspectiveCamera`）にしている。z=0 の平面上では映像のピクセル座標がそのままワールド座標の XY に対応するように置き、手のひらの2D座標に直接重ねる
+- 球本体・ハロー・風の弧は通常の半透明合成で描く。加算合成は背景より明るくすることしかできず、白い壁や肌の上では白く飛んで青にならないため。線だけは青い球の上で光らせるため加算合成にしている
 
-## その他
+## 見た目の確認
 
-- `magic_gesture_prototype.html` は初期のスタンドアロン版プロトタイプ。`src/` の実装とは独立している
+`npm run dev` で起動し、URL に `?preview` を付けて開く（例：`http://localhost:5173/?preview`）。カメラと手の検出を使わずに、画面中央に螺旋丸を出し続ける。
+`?preview&bg=light` にすると背景が明るくなり、白い壁や肌の上での見え方を確認できる。
